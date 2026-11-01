@@ -40,7 +40,7 @@ What you get:
 
 | Output | Where |
 |---|---|
-| GTA VI Discord posts | your dedicated webhook, bot name "Leonida Wire", pink embeds, optional `mentionRoleId` ping |
+| GTA VI Discord posts | your dedicated webhook, bot name "Leo's Black Book", pink embeds, optional `mentionRoleId` ping |
 | RSS per genre | `http://host:3000/feed-grand-theft-auto-vi.xml` (with `mergeFeeds: false`) |
 | Event log (NDJSON) | `http://host:3000/events-grand-theft-auto-vi.jsonl` |
 | Event log (JSON array, CORS open) | `http://host:3000/events-grand-theft-auto-vi.json` |
@@ -73,7 +73,7 @@ Channel config block (any genre may have one):
 channels:
   grand_theft_auto_vi:
     webhookUrl: "https://discord.com/api/webhooks/..."
-    profileName: "Leonida Wire"
+    profileName: "Leo's Black Book"
     authorName: "Rockstar Newswire · Grand Theft Auto VI"
     color: "#F26B8A"
     mentionRoleId: "123456789012345678"   # optional

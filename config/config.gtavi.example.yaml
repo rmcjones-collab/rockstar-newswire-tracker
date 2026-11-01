@@ -39,7 +39,7 @@ genres:
 channels:
   grand_theft_auto_vi:
     webhookUrl: "YOUR_GTA_VI_WEBHOOK_URL_HERE"
-    profileName: "Leonida Wire"
+    profileName: "Leo's Black Book"
     authorName: "Rockstar Newswire · Grand Theft Auto VI"
     color: "#F26B8A"
     # mentionRoleId: "123456789012345678"   # ping a role on every GTA VI post
