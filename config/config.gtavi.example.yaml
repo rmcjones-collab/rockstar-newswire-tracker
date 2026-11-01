@@ -1,0 +1,49 @@
+# GTA VI channel preset for the Rockstar Newswire Tracker.
+#
+# Run with:   CONFIG_PATH=./config/config.gtavi.example.yaml npm start
+# or copy this file over config/config.yaml.
+#
+# What it does:
+#   - Polls the Grand Theft Auto VI newswire tag (666) plus general game
+#     updates and the "latest" firehose.
+#   - Routes GTA VI posts to their OWN Discord channel (dedicated webhook,
+#     distinct bot name and embed colour, optional role ping).
+#   - Appends every delivered post to feeds/events-<genre>.jsonl so a
+#     companion app can ingest the publisher's timeline (title updates,
+#     trailers, launch posts) without scraping anything itself.
+
+enableDiscord: true
+enableRSS: true
+enableEventLog: true   # feeds/events-<genre>.jsonl + /events-<genre>.json routes
+mergeFeeds: false      # one RSS file per genre: /feed-grand-theft-auto-vi.xml
+
+# Shared webhook for genres that do NOT have their own channel below.
+# Env override: DISCORD_WEBHOOK_URL
+webhookUrl: "YOUR_WEBHOOK_URL_HERE"
+discordProfileName: "Rockstar Newswire Tracker"
+dateFormat: "MM/DD/YYYY"
+
+# Launch week is busy: poll every 30 minutes and look 5 posts deep so a burst
+# of same-day posts (trailer + store + patch notes) is not missed.
+checkLimit: 5
+refreshInterval: 30
+
+genres:
+  - grand_theft_auto_vi
+  - updates
+  - latest
+
+# Per-genre channels. Any genre may have one; keys match the genres list.
+# Env override per genre: DISCORD_WEBHOOK_URL_<GENRE_UPPERCASE>, e.g.
+#   DISCORD_WEBHOOK_URL_GRAND_THEFT_AUTO_VI=https://discord.com/api/webhooks/...
+channels:
+  grand_theft_auto_vi:
+    webhookUrl: "YOUR_GTA_VI_WEBHOOK_URL_HERE"
+    profileName: "Leonida Wire"
+    authorName: "Rockstar Newswire · Grand Theft Auto VI"
+    color: "#F26B8A"
+    # mentionRoleId: "123456789012345678"   # ping a role on every GTA VI post
+  updates:
+    webhookUrl: "YOUR_UPDATES_WEBHOOK_URL_HERE"
+    profileName: "Patch Notes"
+    color: "#4FB3BF"

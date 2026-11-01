@@ -13,6 +13,73 @@ A lightweight, customizable, powerful tool to track the latest [Rockstar Games N
 - **RSS Feed**: Generates strictly typed RSS 2.0 feeds (`feed.xml`). Supports **Merged** (all genres in one feed) or **Separate** (one feed per genre) modes.
 - **Multiple Categories**: specialized tracking for specific games like **GTA VI**, **Red Dead Online**, or general **Rockstar Announcements**.
 - **Auto-Refresh**: Automatically polls for new content every 2 hours (configurable).
+- **Per-genre channels**: Route any genre (e.g. **Grand Theft Auto VI**) to its own Discord webhook with its own bot name, embed colour and optional role ping.
+- **Event log**: Every delivered article is appended to `feeds/events-<genre>.jsonl` with a coarse `kind` (`title_update`, `trailer`, `launch`, `weekly_event`, ...) and served as JSON, so other tools can consume the Newswire timeline without scraping.
+
+## GTA VI channel (this fork)
+
+This fork adds a dedicated Grand Theft Auto VI channel on top of NightMean's tracker. It exists to feed a companion app's "publisher clock" (title updates, trailers, launch posts) from the only official source, the [Rockstar Newswire](https://www.rockstargames.com/newswire), which has no RSS or public API.
+
+Quick start:
+
+```bash
+npm install
+# Put your webhooks in the preset (or use the env overrides below)
+CONFIG_PATH=./config/config.gtavi.example.yaml npm start
+```
+
+Env overrides (keep secrets out of YAML, Docker-friendly):
+
+```bash
+DISCORD_WEBHOOK_URL=...                         # shared webhook (genres without a channel)
+DISCORD_WEBHOOK_URL_GRAND_THEFT_AUTO_VI=...     # GTA VI channel
+DISCORD_WEBHOOK_URL_UPDATES=...                 # title updates channel
+```
+
+What you get:
+
+| Output | Where |
+|---|---|
+| GTA VI Discord posts | your dedicated webhook, bot name "Leonida Wire", pink embeds, optional `mentionRoleId` ping |
+| RSS per genre | `http://host:3000/feed-grand-theft-auto-vi.xml` (with `mergeFeeds: false`) |
+| Event log (NDJSON) | `http://host:3000/events-grand-theft-auto-vi.jsonl` |
+| Event log (JSON array, CORS open) | `http://host:3000/events-grand-theft-auto-vi.json` |
+
+Event record (`schemaVersion: 1`):
+
+```json
+{
+  "schemaVersion": 1,
+  "id": "o1k2n3",
+  "genre": "grand_theft_auto_vi",
+  "kind": "title_update",
+  "title": "Grand Theft Auto VI Title Update 1.02 Notes",
+  "url": "https://www.rockstargames.com/newswire/article/...",
+  "date": "2026-11-25T15:00:00.000Z",
+  "dateRaw": "11/25/26, 3:00 PM",
+  "tags": ["Grand Theft Auto VI", "Updates"],
+  "subtitle": "",
+  "image": "https://media-rockstargames-com.akamaized.net/...",
+  "source": { "tier": 0, "name": "rockstar-newswire" },
+  "recordedAt": "2026-11-25T15:31:07.000Z"
+}
+```
+
+`kind` is a keyword heuristic over title, subtitle and tags (see `KIND_RULES` in `src/eventLog.js`); keep the raw `tags` if you need certainty. `date` is ISO-8601 parsed from Rockstar's locale string (kept verbatim in `dateRaw`); it is `null` if parsing fails. `source.tier: 0` marks the record as first-party Rockstar, matching the canon/community tiering used by the companion app's claims ledger.
+
+Channel config block (any genre may have one):
+
+```yaml
+channels:
+  grand_theft_auto_vi:
+    webhookUrl: "https://discord.com/api/webhooks/..."
+    profileName: "Leonida Wire"
+    authorName: "Rockstar Newswire · Grand Theft Auto VI"
+    color: "#F26B8A"
+    mentionRoleId: "123456789012345678"   # optional
+```
+
+Genres without a channel keep using the shared `webhookUrl`. If every enabled genre has its own channel, the shared webhook is not required.
 
 
 ## Installation & Usage
@@ -72,6 +139,8 @@ npm test
 ```
 
 ## Configuration file (`config.yaml`)
+Set `CONFIG_PATH` to load a different file (e.g. `config/config.gtavi.example.yaml`).
+
 ```yaml
 enableDiscord: true
 enableRSS: true

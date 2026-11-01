@@ -25,12 +25,14 @@ Node.js service that scrapes the Rockstar Games Newswire and fans it out to Disc
 - **`src/poller.js`** — `NewswirePoller` class (one per genre): refresh loop, tick overlap guard + error boundary, unseen-article detection, delivery ordering. Store/notifier/api are injected via constructor; the rotating hash is instance state.
 - **`src/newswireApi.js`** — genre registry (`genres` map = canonical list), GraphQL client (`NewswireApi.fetchList/fetchArticle`), Puppeteer token fetcher with bot-wall evasion and bounded retries (`acquireHashWithRetries`), pure `mapArticleSummary` mapper.
 - **`src/articleStore.js`** — seen-articles DB: load once at startup (`whenLoaded`), `has`, atomic `markSeen`.
-- **`src/discordNotifier.js`** — webhook delivery with 3× retry; returns boolean success.
+- **`src/discordNotifier.js`** — webhook delivery with 3× retry; returns boolean success. Accepts per-channel `color`, `authorName`, `mentionRoleId` (defaults reproduce the original look).
+- **`src/channels.js`** — pure per-genre channel resolution (`resolveChannel`, `validateChannels`): dedicated webhook per genre via `config.channels[genre]` or `DISCORD_WEBHOOK_URL_<GENRE>` env, plus the `grand_theft_auto_vi` preset.
+- **`src/eventLog.js`** — JSONL event log (`feeds/events-<genre>.jsonl`), `classifyArticle` keyword heuristic (`KIND_RULES`), `parseEventPath` for the `/events-<genre>.json[l]` routes. Fed from the poller's `onDelivered` hook, which fires after a successful Discord send and before `markSeen`.
 - **`src/feedGenerator.js`** — merged/separate RSS file generation from per-genre item collections.
 - **`src/utils.js`** — dependency-free pure helpers (`escapeHtml`, `formatDate`, `parseContent`, `sanitizeFeedFilename`, `isValidDiscordWebhookUrl`, `DEFAULT_DISCORD_AVATAR_URL`).
 - **`src/logger.js`** — minimal leveled logger (`LOG_LEVEL` env, default info); all logging goes through it.
 
-Dependency direction is strictly downward: index → poller → api/store/notifier; everything may use utils/logger; nothing imports index.js.
+Dependency direction is strictly downward: index → poller → api/store/notifier; index also uses channels/eventLog; everything may use utils/logger; nothing imports index.js.
 
 ### Data flow
 1. Each `newswire` instance's `main()` awaits the shared article DB load, then awaits `getHashToken()`.
@@ -71,7 +73,6 @@ Each genre's interval tick is guarded by `isRefreshing` so slow ticks never over
 - Docker sets `PUPPETEER_SKIP_DOWNLOAD=true` and `PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome-stable` — the container uses system Chrome, not the bundled Chromium, and runs as the `node` user.
 - `parseContent()` intentionally does NOT escape `HTMLElement` node content: those carry ready-made embed markup (YouTube iframes). Text we interpolate ourselves is escaped via `escapeHtml`.
 
-## Repository policy
+## Repository policy (this fork)
 
-The repository is permanently private. The owner authorized tracking this AGENTS.md.
-The owner authorizes automatic pushes of verified changes to origin/main while GitHub confirms this repository is private. Check visibility before pushing; do not automatically push if it is public or visibility cannot be confirmed.
+This is a public fork of NightMean/Rockstar-newswire-tracker maintained for a GTA VI companion-app project. Do not push automatically; changes land on the `gta-vi-channel` branch via reviewed commits. Keep `master` in sync with upstream so upstream fixes can be merged cleanly.

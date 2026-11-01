@@ -8,6 +8,8 @@ const { DiscordNotifier } = require('./src/discordNotifier');
 const articleStore = require('./src/articleStore');
 const { generateFeeds } = require('./src/feedGenerator');
 const { sanitizeFeedFilename, isValidDiscordWebhookUrl, DEFAULT_DISCORD_AVATAR_URL } = require('./src/utils');
+const { resolveChannel, validateChannels } = require('./src/channels');
+const { EventLog, parseEventPath } = require('./src/eventLog');
 const log = require('./src/logger');
 
 // Feed output directory, created on startup so fresh installs can write feeds
@@ -17,7 +19,8 @@ fs.mkdirSync(FEEDS_DIR, { recursive: true });
 // Load Configuration
 let config;
 try {
-    const fileContents = fs.readFileSync('./config/config.yaml', 'utf8');
+    const configPath = process.env.CONFIG_PATH || './config/config.yaml';
+    const fileContents = fs.readFileSync(configPath, 'utf8');
     config = yaml.load(fileContents);
 } catch (e) {
     log.error('[ERROR] Failed to load config.yaml:', e);
@@ -29,18 +32,29 @@ if (process.env.DISCORD_WEBHOOK_URL) {
     config.webhookUrl = process.env.DISCORD_WEBHOOK_URL;
 }
 
+const genres = config.genres || ['latest'];
+
+// Per-genre channels (src/channels.js). A genre with its own webhook does not
+// need the shared one, so the global webhook is only required when at least
+// one enabled genre falls back to it.
+const channelProblems = validateChannels(config);
+if (channelProblems.length) {
+    channelProblems.forEach(p => log.error('[ERROR] ' + p));
+    process.exit(1);
+}
+const needsSharedWebhook = config.enableDiscord && genres.some(g => !resolveChannel(g, config).dedicated);
+const hasSharedWebhook = config.webhookUrl && config.webhookUrl !== 'YOUR_WEBHOOK_URL_HERE';
+
 // Validate Webhook for Discord
-if (config.enableDiscord && (!config.webhookUrl || config.webhookUrl === 'YOUR_WEBHOOK_URL_HERE')) {
-    log.error('[ERROR] Discord is enabled but Webhook URL is not configured. Please check config.yaml or set DISCORD_WEBHOOK_URL env variable.');
+if (needsSharedWebhook && !hasSharedWebhook) {
+    log.error('[ERROR] Discord is enabled but Webhook URL is not configured. Please check config.yaml, set DISCORD_WEBHOOK_URL, or give every enabled genre its own channel webhook.');
     process.exit(1);
 }
 // A mistyped webhook URL would silently post article data to an arbitrary host
-if (config.enableDiscord && !isValidDiscordWebhookUrl(config.webhookUrl)) {
+if (needsSharedWebhook && !isValidDiscordWebhookUrl(config.webhookUrl)) {
     log.error('[ERROR] webhookUrl does not look like a Discord webhook URL (expected https://discord.com/api/webhooks/...). Got: ' + config.webhookUrl);
     process.exit(1);
 }
-
-const genres = config.genres || ['latest'];
 // A genre listed twice would spawn two pollers for the same feed and can
 // double-send Discord notifications on the first poll race.
 const uniqueGenres = [...new Set(genres)];
@@ -100,28 +114,44 @@ if (config.checkLimit > MAX_CHECK_LIMIT) {
 // Store articles for each genre: { genreName: [items] }
 const allArticles = {};
 
+// JSONL event log (feeds/events-<genre>.jsonl), on by default. Served at
+// /events-<genre>.jsonl and /events-<genre>.json when the HTTP server runs.
+const ENABLE_EVENT_LOG = config.enableEventLog !== false;
+const eventLog = new EventLog({ feedsDir: FEEDS_DIR, enabled: ENABLE_EVENT_LOG });
+
 // Start Newswire Instances
 const packageJson = require('./package.json');
 log.info(`[INIT] Starting Rockstar Newswire Tracker v${packageJson.version}`);
 log.info(`[INIT] Enabled Genres: ${uniqueGenres.join(', ')}`);
-log.info(`[INIT] Services: Discord=${config.enableDiscord}, RSS=${config.enableRSS}`);
+log.info(`[INIT] Services: Discord=${config.enableDiscord}, RSS=${config.enableRSS}, EventLog=${ENABLE_EVENT_LOG}`);
 log.info(`[INIT] RSS Mode: ${MERGE_FEEDS ? 'Merged (feed.xml)' : 'Separate (feed-[genre].xml)'}`);
 
 uniqueGenres.forEach(genre => {
+    const channel = resolveChannel(genre, config);
+    if (channel.dedicated) {
+        log.info(`[INIT] Genre "${genre}" posts to its own Discord channel as "${channel.profileName}".`);
+    }
     new NewswirePoller({
         genre,
         tagId: GENRE_TAG_IDS[genre],
         store: articleStore,
         notifier: new DiscordNotifier({
-            webhookUrl: config.enableDiscord ? config.webhookUrl : null,
-            profileName: config.discordProfileName || "Rockstar Newswire Tracker",
-            avatarUrl: config.discordAvatarUrl || DEFAULT_DISCORD_AVATAR_URL,
-            dateFormat: dateFormat
+            webhookUrl: config.enableDiscord ? channel.webhookUrl : null,
+            profileName: channel.profileName,
+            avatarUrl: channel.avatarUrl || DEFAULT_DISCORD_AVATAR_URL,
+            dateFormat: dateFormat,
+            color: channel.color,
+            authorName: channel.authorName,
+            mentionRoleId: channel.mentionRoleId
         }),
         options: {
             enableRSS: config.enableRSS,
             refreshInterval: refreshIntervalMinutes * 60 * 1000, // Convert minutes to ms
-            checkLimit: checkLimit
+            checkLimit: checkLimit,
+            onDelivered: (article, g) => {
+                const event = eventLog.append(g, article);
+                if (event) log.info(`[EVENTS] ${g}: ${event.kind} — ${event.title}`);
+            }
         },
         onRSSUpdate: (items) => {
             log.info(`[RSS] Received ${items.length} articles for ${genre}`);
@@ -145,6 +175,36 @@ if (config.enableRSS) {
 
         log.info(`[SERVER] Request: ${req.method} ${req.url}`);
 
+        // Event log routes: /events-<genre>.jsonl (raw) or .json (array)
+        const eventPath = parseEventPath(req.url);
+        if (eventPath) {
+            if (!ENABLE_EVENT_LOG) {
+                res.writeHead(404, { 'Content-Type': 'text/plain' });
+                res.end('Event log is disabled in config.');
+                return;
+            }
+            try {
+                if (eventPath.asJson) {
+                    res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+                    res.end(JSON.stringify(eventLog.read(eventPath.filename)));
+                } else {
+                    const content = fs.readFileSync(path.join(FEEDS_DIR, eventPath.filename));
+                    res.writeHead(200, { 'Content-Type': 'application/x-ndjson', 'Access-Control-Allow-Origin': '*' });
+                    res.end(content);
+                }
+            } catch (err) {
+                if (err.code === 'ENOENT') {
+                    res.writeHead(200, { 'Content-Type': eventPath.asJson ? 'application/json' : 'application/x-ndjson' });
+                    res.end(eventPath.asJson ? '[]' : '');
+                } else {
+                    res.writeHead(500, { 'Content-Type': 'text/plain' });
+                    res.end('Internal Server Error');
+                    log.error('[SERVER] Error reading event log:', err);
+                }
+            }
+            return;
+        }
+
         // Routing
         let targetFile = null;
         if (MERGE_FEEDS) {
@@ -163,7 +223,11 @@ if (config.enableRSS) {
                     const urlGenre = g.replace(/_/g, '-');
                     return `<li><a href="/feed-${urlGenre}.xml">${g}</a></li>`;
                 }).join('');
-                res.end(`<h1>Rockstar Newswire RSS Feeds</h1><ul>${links}</ul>`);
+                const eventLinks = ENABLE_EVENT_LOG ? uniqueGenres.map(g => {
+                    const urlGenre = g.replace(/_/g, '-');
+                    return `<li><a href="/events-${urlGenre}.json">${g}</a> (<a href="/events-${urlGenre}.jsonl">jsonl</a>)</li>`;
+                }).join('') : '';
+                res.end(`<h1>Rockstar Newswire RSS Feeds</h1><ul>${links}</ul>` + (eventLinks ? `<h2>Event logs</h2><ul>${eventLinks}</ul>` : ''));
                 return;
             }
         }

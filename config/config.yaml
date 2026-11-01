@@ -30,6 +30,22 @@ checkLimit: 3
 #   1440 = 1 day
 refreshInterval: 120
 
+# Event log (feeds/events-<genre>.jsonl). Every delivered article is appended
+# as one JSON line with a coarse `kind` (title_update, trailer, launch, ...)
+# and served at /events-<genre>.jsonl and /events-<genre>.json.
+enableEventLog: true
+
+# Per-genre Discord channels (optional). A genre listed here posts to its own
+# webhook with its own bot name / embed colour instead of the shared one.
+# See config/config.gtavi.example.yaml for a ready-made GTA VI setup.
+# Env override per genre: DISCORD_WEBHOOK_URL_<GENRE_UPPERCASE>
+# channels:
+#   grand_theft_auto_vi:
+#     webhookUrl: "https://discord.com/api/webhooks/..."
+#     profileName: "Leonida Wire"
+#     color: "#F26B8A"
+#     mentionRoleId: "123456789012345678"
+
 # News Types (Genres)
 # Uncomment the categories you want to track.
 # NOTE: By default, only 'latest' is enabled. To enable specific categories, remove the '#' at the start of the line.

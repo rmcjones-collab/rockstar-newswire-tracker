@@ -1,7 +1,7 @@
 {
   "name": "rockstar-newswire",
-  "version": "2.1.1",
-  "description": "Bring GTA V/Red dead 2/Latest News to your discord server or RSS feed.",
+  "version": "2.2.0",
+  "description": "Bring Rockstar Newswire news to Discord or RSS, with per-genre channels (GTA VI) and a JSONL event log.",
   "main": "src/poller.js",
   "engines": {
     "node": ">=18"
@@ -30,7 +30,11 @@
     "discord-rdr2",
     "discord-rdr2-news",
     "rockstar-newswire",
-    "rockstar-newswire-discord"
+    "rockstar-newswire-discord",
+    "gta6",
+    "gtavi",
+    "grand-theft-auto-vi",
+    "event-log"
   ],
   "author": "Carbowix & NightMean",
   "license": "MIT",
