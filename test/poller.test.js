@@ -189,3 +189,29 @@ test('tick resets the refreshing flag even when a cycle throws', async () => {
 
     assert.strictEqual(poller.isRefreshing, false);
 });
+
+test('processNewArticles fires onDelivered only for delivered articles, before markSeen', async () => {
+    const store = makeStore();
+    const seenAtHook = [];
+    const hook = [];
+    const poller = makePoller({
+        store,
+        notifier: { send: async (a) => a.id !== 'fail' },
+        onDelivered: (article, genre) => { hook.push([article.id, genre]); seenAtHook.push(store.has(article.id)); }
+    });
+    await poller.processNewArticles([
+        { id: 'ok', title: 'ok', link: 'l' },
+        { id: 'fail', title: 'fail', link: 'l' }
+    ]);
+    assert.deepStrictEqual(hook, [['ok', 'latest']]);
+    assert.deepStrictEqual(seenAtHook, [false]);
+    assert.strictEqual(store.has('ok'), true);
+    assert.strictEqual(store.has('fail'), false);
+});
+
+test('a throwing onDelivered hook does not block markSeen', async () => {
+    const store = makeStore();
+    const poller = makePoller({ store, onDelivered: () => { throw new Error('boom'); } });
+    await poller.processNewArticles([{ id: 'x', title: 'x', link: 'l' }]);
+    assert.strictEqual(store.has('x'), true);
+});

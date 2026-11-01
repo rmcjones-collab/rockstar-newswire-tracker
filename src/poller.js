@@ -30,6 +30,9 @@ class NewswirePoller {
         this.api = options.api || new NewswireApi(tagId);
         this.acquireHash = options.acquireHash || acquireHashWithRetries;
         this.rateLimitDelayMs = options.rateLimitDelayMs ?? RATE_LIMIT_DELAY_MS;
+        // Optional hook fired once per successfully delivered article, before
+        // it is marked seen (used by the JSONL event log). Errors are isolated.
+        this.onDelivered = typeof options.onDelivered === 'function' ? options.onDelivered : null;
         // Rotating persisted-query hash; fetched at startup, refreshed on expiry.
         this.hash = null;
 
@@ -162,6 +165,13 @@ class NewswirePoller {
             const delivered = await this.notifier.send(article);
 
             if (delivered) {
+                if (this.onDelivered) {
+                    try {
+                        this.onDelivered(article, this.genre);
+                    } catch (e) {
+                        log.error(`[ERROR] onDelivered hook failed for ${article.id}:`, e);
+                    }
+                }
                 // Persist as seen only after a successful delivery so a failed
                 // send is retried on the next refresh instead of being lost.
                 this.store.markSeen(article.id.toString(), article.link);
