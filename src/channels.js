@@ -7,7 +7,7 @@ const { isValidDiscordWebhookUrl } = require('./utils');
 // Opinionated preset for the Grand Theft Auto VI channel. Everything here can
 // be overridden from config.yaml `channels.grand_theft_auto_vi`.
 const GTA_VI_PRESET = Object.freeze({
-    profileName: 'Leo's Black Book',
+    profileName: "Leo's Black Book",
     color: 0xF26B8A, // sunset pink; distinct from the orange used for general news
     authorName: 'Rockstar Newswire · Grand Theft Auto VI',
     mentionRoleId: null
