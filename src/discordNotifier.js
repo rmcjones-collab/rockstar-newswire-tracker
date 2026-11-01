@@ -8,6 +8,7 @@ const log = require('./logger');
 const REQUEST_TIMEOUT_MS = 30000;
 const SEND_RETRIES = 3;
 const RETRY_DELAY_MS = 2000;
+const DEFAULT_EMBED_COLOR = 16756992;
 
 const requestOptions = {
     method: 'POST',
@@ -18,11 +19,16 @@ const requestOptions = {
 };
 
 class DiscordNotifier {
-    constructor({ webhookUrl, profileName, avatarUrl, dateFormat }) {
+    // color / authorName / mentionRoleId are optional per-channel styling
+    // (see src/channels.js); defaults reproduce the original single-channel look.
+    constructor({ webhookUrl, profileName, avatarUrl, dateFormat, color, authorName, mentionRoleId }) {
         this.webhookUrl = webhookUrl;
         this.profileName = profileName;
         this.avatarUrl = avatarUrl;
         this.dateFormat = dateFormat;
+        this.color = Number.isFinite(color) ? color : DEFAULT_EMBED_COLOR;
+        this.authorName = authorName || 'Rockstar Newswire';
+        this.mentionRoleId = mentionRoleId || null;
     }
 
     // Resolves true when the webhook accepted the payload (2xx), false after
@@ -48,19 +54,19 @@ class DiscordNotifier {
         const dateStr = formatDate(article.date, this.dateFormat);
         const tagsJoined = Array.isArray(article.tags) ? article.tags.join(', ') : '';
 
-        return {
+        const payload = {
             username: this.profileName,
             avatar_url: this.avatarUrl,
             embeds: [{
                 'author': {
-                    'name': 'Rockstar Newswire',
+                    'name': this.authorName,
                     'url': 'https://www.rockstargames.com/newswire',
                     'icon_url': DEFAULT_DISCORD_AVATAR_URL
                 },
                 'title': article.title,
                 'url': article.link,
                 'description': article.subtitle || "",
-                'color': 16756992,
+                'color': this.color,
                 'fields': [],
                 'image': {
                     'url': article.img
@@ -70,6 +76,13 @@ class DiscordNotifier {
                 }
             }]
         };
+        // Optional role ping for a dedicated channel (e.g. @GTA VI news).
+        // allowed_mentions restricts the ping to exactly that role.
+        if (this.mentionRoleId) {
+            payload.content = `<@&${this.mentionRoleId}>`;
+            payload.allowed_mentions = { roles: [String(this.mentionRoleId)] };
+        }
+        return payload;
     }
 
     deliverWebhook(payload) {
