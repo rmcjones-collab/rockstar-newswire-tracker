@@ -42,7 +42,7 @@ enableEventLog: true
 # channels:
 #   grand_theft_auto_vi:
 #     webhookUrl: "https://discord.com/api/webhooks/..."
-#     profileName: "Leonida Wire"
+#     profileName: "Leo's Black Book"
 #     color: "#F26B8A"
 #     mentionRoleId: "123456789012345678"
 
